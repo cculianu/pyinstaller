@@ -103,3 +103,41 @@ def fix_exe_for_code_signing(filename):
     ## Write changes back.
     with open(exe_data.filename, 'rb+') as fp:
         exe_data.write(fp)
+
+def osx_code_sign(binary, identity, deep=None, verbose=True):
+    """ Code sign binary (.so, .dylib, or .app) using identity.
+
+    Relies on the codesign utility which must be in PATH.
+
+    binary
+        (str) Full path to the binary or .app to be signed.
+    identity
+        (str) The code signing identity to use (codesign -s option).
+    deep
+        (bool) Specify whether to use the codesign --deep option. If not
+        specified, will auto-detect based on whether binary is a .app directory
+        or a stand-alone file.
+    verbose
+        (bool) Specify whether codesign output should be verbose.
+    """
+    if deep is None and os.path.isdir(binary):
+        deep = True
+    deep = '--deep' if deep else ''
+    verbose = '-v' if verbose else ''
+
+    d = os.path.dirname(binary)
+    saved_dir=None
+    if d:
+        # switch to directory of the binary so codesign verbose messages don't
+        # include long path
+        saved_dir = os.path.abspath(os.path.curdir)
+        os.chdir(d)
+        binary = os.path.basename(binary)
+    if 0 != os.system("codesign {} -f {} -s '{}' '{}'".format(verbose, deep,
+                                                              identity, binary)):
+        raise SystemExit('Error: Failed to code sign binary {} using identity '
+                         '"{}". Please ensure that the ``codesign`` utility '
+                         'is in your PATH and that the identity specified is '
+                         'valid for signing.'.format(binary, identity))
+    if saved_dir:
+        os.chdir(saved_dir)

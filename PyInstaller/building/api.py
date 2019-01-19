@@ -154,7 +154,7 @@ class PKG(Target):
                  'DEPENDENCY': 'd'}
 
     def __init__(self, toc, name=None, cdict=None, exclude_binaries=0,
-                 strip_binaries=False, upx_binaries=False):
+                 strip_binaries=False, upx_binaries=False, codesign_identity=None):
         """
         toc
                 A TOC (Table of Contents)
@@ -171,6 +171,9 @@ class PKG(Target):
         strip_binaries
                 If True, use 'strip' command to reduce the size of binary files.
         upx_binaries
+        codesign_identity
+                OSX Only: If specified, use the codesign utility to sign all
+                embedded binaries using this identity.
         """
         Target.__init__(self)
         self.toc = toc
@@ -181,6 +184,11 @@ class PKG(Target):
         self.exclude_binaries = exclude_binaries
         self.strip_binaries = strip_binaries
         self.upx_binaries = upx_binaries
+        if is_darwin:
+            from ..config import CONF
+            self.codesign_identity = codesign_identity if codesign_identity is not None else CONF['codesign_identity']
+        else:
+            self.codesign_identity = None
         # This dict tells PyInstaller what items embedded in the executable should
         # be compressed.
         if self.cdict is None:
@@ -256,7 +264,7 @@ class PKG(Target):
 
                     fnm = checkCache(fnm, strip=self.strip_binaries,
                                      upx=(self.upx_binaries and (is_win or is_cygwin)),
-                                     dist_nm=inm)
+                                     dist_nm=inm, codesign_identity=self.codesign_identity)
 
                     mytoc.append((inm, fnm, self.cdict.get(typ, 0),
                                   self.xformdict.get(typ, 'b')))
@@ -657,6 +665,13 @@ class COLLECT(Target):
         # then collected to this directory.
         self.name = os.path.join(CONF['distpath'], os.path.basename(self.name))
 
+        if is_darwin:
+            csi = kws.get('codesign_identity', None)
+            self.codesign_identity = csi if csi is not None else CONF['codesign_identity']
+            del csi
+        else:
+            self.codesign_identity = None
+
         self.toc = TOC()
         for arg in args:
             if isinstance(arg, TOC):
@@ -704,7 +719,7 @@ class COLLECT(Target):
             if typ in ('EXTENSION', 'BINARY'):
                 fnm = checkCache(fnm, strip=self.strip_binaries,
                                  upx=(self.upx_binaries and (is_win or is_cygwin)),
-                                 dist_nm=inm)
+                                 dist_nm=inm, codesign_identity=self.codesign_identity)
             if typ != 'DEPENDENCY':
                 shutil.copy(fnm, tofnm)
                 try:
